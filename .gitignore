@@ -1,0 +1,9 @@
+.vscode
+sim.out.dSYM
+sim.dSYM
+nul
+.stdafx.c++.pch
+input_data0.txt
+*.out
+*.exe
+sim
