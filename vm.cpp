@@ -30,7 +30,6 @@ int CONFIG_LOG_DETAIL_LEVEL = 2; // степень подробности лог
 // 1 - отображаются только действия АС
 SimulatorTime CONFIG_SIM_TIME_LIMIT = Hour; // лимит времени работы симулятора
 
-
 SimulatorTime AE_DEFAULT_TIME_FOR_DATA_IO = 10*microSec; // время работы устройства ввода/ввывода
 uint64_t AE_DEFAULT_DISKSPACE_SIZE = 2000; // размер файла подкачки в страницах
 
@@ -39,12 +38,18 @@ SimulatorTime CPU_DEFAULT_TIME_FOR_CONVERSION = 1; // время на преоб
 SimulatorTime OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT = 10000; // время, на которое процессу дается ЦП (потом ЦП передается другуму претенденту в очереди)
 uint64_t OS_DEFAULT_RAM_SIZE = 700; // размер ОП в страницах
 uint64_t OS_DEFAULT_TIME_FOR_ALLOCATION = 10*microSec; // время на размещение
+int OS_SUBSTITUTE_STRATEGY = 1; // стратегия выбора кандидата на перераспределение
 
 SimulatorTime PROCESS_DEFAULT_WORK_TIME = 1; // время, за которое процесс совершает единицу работы
 uint64_t PROCESS_DEFAULT_REQUESTED_MEMORY = 40; // память, необходимая процессу в количестве страниц
 int PROCESS_AMOUNT = 15; // количество процессов
 int PROCESS_MEMORY_ACCESS_PERCENTAGE = 40; // процент инструкций процесса, которые требуют обращения в память
 
+// Substitue strategies
+
+RealAddress RandomSelectionStrategy() {
+  return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
+};
 
 int InitializeInputData() {
     ifstream input_data;
@@ -79,6 +84,8 @@ int InitializeInputData() {
                 OS_DEFAULT_RAM_SIZE = stoll(read_buffer.substr(eq_pos+1, read_buffer.size()));
             } else if (read_buffer.substr(0,eq_pos) == "OS_DEFAULT_TIME_FOR_ALLOCATION") {
                 OS_DEFAULT_TIME_FOR_ALLOCATION = stoll(read_buffer.substr(eq_pos+1, read_buffer.size()));
+            } else if (read_buffer.substr(0,eq_pos) == "OS_SUBSTITUTE_STRATEGY") {
+                OS_SUBSTITUTE_STRATEGY = stoll(read_buffer.substr(eq_pos+1, read_buffer.size()));
             } else if (read_buffer.substr(0,eq_pos) == "PROCESS_DEFAULT_WORK_TIME") {
                 PROCESS_DEFAULT_WORK_TIME = stoll(read_buffer.substr(eq_pos+1, read_buffer.size()));
             } else if (read_buffer.substr(0,eq_pos) == "PROCESS_DEFAULT_REQUESTED_MEMORY") {
@@ -100,6 +107,7 @@ int InitializeInputData() {
         cout << setw(40) << left << "OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT = " << setw(20) << right  << OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT << endl;
         cout << setw(40) << left << "OS_DEFAULT_RAM_SIZE = " << setw(20) << right  << OS_DEFAULT_RAM_SIZE << endl;
         cout << setw(40) << left << "OS_DEFAULT_TIME_FOR_ALLOCATION = " << setw(20) << right  << OS_DEFAULT_TIME_FOR_ALLOCATION << endl;
+        cout << setw(40) << left << "OS_SUBSTITUTE_STRATEGY = " << setw(20) << right  << OS_SUBSTITUTE_STRATEGY << endl;
         cout << setw(40) << left << "PROCESS_DEFAULT_WORK_TIME = " << setw(20) << right  << PROCESS_DEFAULT_WORK_TIME << endl;
         cout << setw(40) << left << "PROCESS_DEFAULT_REQUESTED_MEMORY = " << setw(20) << right  << PROCESS_DEFAULT_REQUESTED_MEMORY << endl;
         cout << setw(40) << left << "PROCESS_AMOUNT = " << setw(20) << right  << PROCESS_AMOUNT << endl;
@@ -382,12 +390,14 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
 
     bool found_flag = false;
     while (!found_flag) {
-        // ниже реализована стратегия выбора кандидата на перераспределение
-        // в данном случае - стратегия случайного выбора
 
-        candidate_raddress = static_cast<RealAddress>(randomizer(ram.GetSize()));
+        switch (OS_SUBSTITUTE_STRATEGY) {
+          case 1:
+            candidate_raddress = RandomSelectionStrategy();
+            break;
+        }
 
-        // конец стратегии выбора кандидата на перераспределение
+
         for (int j =0; j < static_cast<int>(translation_tables.size()); j++) { // цикл по всем ТП
             for (int k = 0; k < static_cast<int>(translation_tables[j].GetSize()); k++) { // цикл по записям j-й ТП
                 if (translation_tables[j].GetRecord(k).raddress == candidate_raddress && translation_tables[j].GetRecord(k).is_valid == true) {
