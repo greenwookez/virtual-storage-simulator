@@ -8,10 +8,12 @@ using namespace std;
 
 struct RequestStruct;
 
+//GVARs
 extern Sim *g_pSim;
 extern OS *g_pOS;
 extern CPU *g_pCPU;
 extern AE *g_pAE;
+extern Clock *g_pClock;
 
 //CONSTs
 const SimulatorTime nanoSec = 1;
@@ -22,7 +24,6 @@ const SimulatorTime Hour = Minute * 60;
 const uint64_t msg_space = 80;
 
 //CONFIG
-
 int CONFIG_LOG_ENABLE_EMPTY_STRINGS = 1; // включает пустые строки в логе 1 - выключает, 0 включает
 int CONFIG_LOG_DETAIL_LEVEL = 2; // степень подробности логирования
 // 3 - максимально подробное логирования
@@ -46,10 +47,13 @@ int PROCESS_AMOUNT = 15; // количество процессов
 int PROCESS_MEMORY_ACCESS_PERCENTAGE = 40; // процент инструкций процесса, которые требуют обращения в память
 
 // Substitue strategies
-
 RealAddress RandomSelectionStrategy() {
-  return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
-};
+    return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
+}
+
+RealAddress ClockSelectionStrategy() {
+    return g_pClock->Tick();
+}
 
 int InitializeInputData() {
     ifstream input_data;
@@ -374,11 +378,6 @@ void OS::Allocate(VirtualAddress vaddress, Process* p_process) {
 }
 
 void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
-    /*
-        Стоит необходимость изменить алгоритм перераспределения.
-
-        Попробовать перебирать все адреса в прямом порядке, пока не встретится подходящий.
-    */
     RealAddress candidate_raddress;
     Process* candidate_process;
     VirtualAddress candidate_vaddress;
@@ -394,6 +393,9 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
         switch (OS_SUBSTITUTE_STRATEGY) {
           case 1:
             candidate_raddress = RandomSelectionStrategy();
+            break;
+          case 2:
+            candidate_raddress = ClockSelectionStrategy();
             break;
         }
 
@@ -455,6 +457,10 @@ Scheduler& OS::GetScheduler() {
     return scheduler;
 }
 
+RAM& OS::GetRAM() {
+    return ram;
+}
+
 float OS::ComputeRML() {
     float result = 0.0;
     for (int i = 0; i < ram.GetSize(); i++) {
@@ -487,12 +493,14 @@ void CPU::Convert(VirtualAddress vaddress, Process *p_process) {
     TTStruct tmp = g_pOS->FindTT(p_process).GetRecord(vaddress);
     Process* scheduler_process = g_pOS->GetScheduler().GetProcess();
 
+    if (OS_SUBSTITUTE_STRATEGY == 2) g_pClock->UpdateRef(tmp.raddress);
 
     if (tmp.is_valid == false) {
         // Прерывание по отсутствию страницы
         if (CONFIG_LOG_DETAIL_LEVEL >= 2) {
             Log("Translate VA=" + string(4 - to_string(vaddress).length(), '0') + to_string(vaddress) + " " + p_process->GetName() + " -> Interrupt");
         }
+
         g_pOS->HandelInterruption(vaddress, tmp.raddress, p_process);
         return;
     } else {
@@ -726,6 +734,82 @@ void Process::SetTimeLimit(SimulatorTime value) {
 SimulatorTime Process::GetTimeLimit() {
     return time_limit;
 }
+
+
+
+ClockItem::ClockItem(PageNumber _address, bool _bitR) {
+    address = _address;
+    bitR = _bitR;
+}
+
+PageNumber ClockItem::GetAddress() {
+    return address;
+}
+
+bool ClockItem::GetBit() {
+    return bitR;
+}
+
+void ClockItem::Decrease() {
+    bitR = false;
+}
+
+void ClockItem::Update() {
+    bitR = true;
+}
+
+
+
+Clock::Clock() {
+    int size = g_pOS->GetRAM().GetSize();
+
+    // Инициализируем стрелку часов
+    chand = 0;
+
+    // Инициализируем вектор часов
+    for (int i = 0; i < size; i++) {
+        dial.push_back(ClockItem(i, true));
+    }
+}
+
+PageNumber Clock::Tick() {
+    int size = g_pOS->GetRAM().GetSize();
+
+    if (chand == size) {
+        chand = 0;
+    }
+
+    if (dial[chand].GetBit() == false) {
+        RealAddress result = static_cast<RealAddress>(dial[chand].GetAddress());
+        return result;
+    } else {
+        int counter = 0;
+
+        do {
+            if (counter > size) {
+                break;
+            }
+            dial[chand].Decrease();
+            
+            chand++;
+            if (chand == size) {
+                chand = 0;
+            }
+
+            counter++;
+        } while (dial[chand].GetBit() == true);
+        
+        RealAddress result = static_cast<RealAddress>(dial[chand].GetAddress());
+        return result;
+    }
+}
+
+void Clock::UpdateRef(RealAddress raddress) {
+    PageNumber page = static_cast<PageNumber>(raddress);
+    dial[page].Update();
+}
+
+
 
 int randomizer(int max) {
     // Функция, которая возвращает случайное число, работает на алгоритме Вихре Мерсенна

@@ -10,9 +10,11 @@ Sim *g_pSim;
 OS *g_pOS;
 CPU *g_pCPU;
 AE *g_pAE;
+Clock *g_pClock;
 
-extern const SimulatorTime CONFIG_SIM_TIME_LIMIT;
-extern const int PROCESS_AMOUNT;
+extern SimulatorTime CONFIG_SIM_TIME_LIMIT;
+extern int PROCESS_AMOUNT;
+extern int OS_SUBSTITUTE_STRATEGY;
 
 int main()
 {
@@ -34,6 +36,10 @@ int main()
         g_pOS = new OS;
         g_pCPU = new CPU;
         g_pAE = new AE;
+
+        if (OS_SUBSTITUTE_STRATEGY == 2) {
+            g_pClock = new Clock;
+        }
 
         Process * all_processes[PROCESS_AMOUNT];
         for (int i = 0; i < PROCESS_AMOUNT; i++) {

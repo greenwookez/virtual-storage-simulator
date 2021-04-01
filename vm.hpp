@@ -3,11 +3,6 @@
 #include "sim.hpp"
 using namespace std;
 
-
-
-
-int InitializeInputData();
-
 //TYPES
 typedef uint64_t PageNumber;
 typedef PageNumber VirtualAddress;
@@ -44,7 +39,7 @@ public:
 };
 
 class RAM {
-    vector <bool> ram; // true means already in use
+    vector<bool> ram; // true means already in use
 public:
     RAM();
     bool GetRealAddress(PageNumber raddress);
@@ -53,7 +48,7 @@ public:
 };
 
 class Requester {
-    vector <RequestStruct> request_queue;
+    vector<RequestStruct> request_queue;
 public:
     void AddRequest(Process* p_process, VirtualAddress vaddress, RealAddress raddress, bool load_flag, Process * p_initialProcess);
     void DeleteRequest(Process* p_process, VirtualAddress vaddress);
@@ -92,6 +87,7 @@ public:
     TT& FindTT(Process* p_process);
     Requester& GetRequester();
     Scheduler& GetScheduler();
+    RAM& GetRAM();
     void ProcessQueue();
     void ChangeQueue();
 
@@ -131,7 +127,7 @@ class AE : public AgentVM {
         DiskAddress daddress;
     };
 
-    vector <SwapIndexStruct> SwapIndex;
+    vector<SwapIndexStruct> SwapIndex;
 
     void LoadData();
     void PopData();
@@ -189,17 +185,41 @@ public:
 
 };
 
-int randomizer(int max);
+class ClockItem {
+    PageNumber address;
+    bool bitR;
+public:
+    ClockItem(PageNumber _address, bool _bitR);
+    PageNumber GetAddress();
+    bool GetBit();
+    void Decrease();
+    void Update();
+};
 
-extern OS* g_pOS;
-extern CPU* g_pCPU;
-extern AE* g_pAE;
+class Clock {
+    vector<ClockItem> dial;
+    PageNumber chand;
+public:
+   Clock();
+   PageNumber Tick();
+   void UpdateRef(RealAddress raddress);
+};
+
+int randomizer(int max);
+int InitializeInputData();
+void InitializeClockState();
+RealAddress RandomSelectionStrategy();
+RealAddress ClockSelectionStrategy();
 
 struct RequestStruct {
     bool load_flag;
     Process* p_process;
     VirtualAddress vaddress;
     RealAddress raddress;
-
     Process* p_initialProcess;
 };
+
+extern OS* g_pOS;
+extern CPU* g_pCPU;
+extern AE* g_pAE;
+
