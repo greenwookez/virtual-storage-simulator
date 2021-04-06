@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <assert.h>
+#include <chrono>
 #include "vm.hpp"
 
 using namespace std;
@@ -56,22 +57,36 @@ int main()
         };
 
         g_pSim->SetLimit(CONFIG_SIM_TIME_LIMIT);
+        
+        auto startt = chrono::high_resolution_clock::now();
+        chrono::duration<float> total_duration = startt - startt;
+
         while(!g_pSim->Run())
         {
-            PrintTime(&std::cout);
-            std::cout << "Do you want to proceed? [Y/n]" << std::endl;
+            PrintTime(&cout);
+            auto endt = chrono::high_resolution_clock::now();
+            chrono::duration<float> duration = endt - startt;
+            cout << "Duration " << duration.count() << "s" << endl;
+            total_duration += duration;
+            
+            PrintTime(&cout);
+            cout << "Do you want to proceed? [Y/n]: ";
 
             char c[3];
-            std::cin.getline(c,sizeof(c));
+            cin.getline(c,sizeof(c));
 
             if(c[0] == 'n')
             {
                 break;
             };
 
+            cout << endl;
+
             g_pSim->SetLimit(g_pSim->GetTime()+CONFIG_SIM_TIME_LIMIT);
         }
 
+        cout << "Total duration " << total_duration.count() << "s" << endl;
+        
         for (int i = 0; i < PROCESS_AMOUNT; i++) {
             delete all_processes[i];
         }
