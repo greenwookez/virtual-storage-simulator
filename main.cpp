@@ -3,7 +3,6 @@
 #include <assert.h>
 #include "vm.hpp"
 
-
 using namespace std;
 
 Sim *g_pSim;
@@ -27,8 +26,15 @@ int main()
     };
 
     cout << endl << endl << "Simulation will go on until the time limit expires." << endl << "To interrupt simulation process immediately press Ctrl+C. " << endl;
-    cout << "Press any key to start simulation." << endl;
-    system("pause >nul");
+    
+    #ifdef _WIN32
+        cout << "Press any key to start simulation" << endl;
+        system("pause >nul");
+    #else
+        system("read -n 1 -s -r -p 'Press any key to start simulation'");
+    #endif
+    
+    
     cout << "Starting simulation. It could take few minutes until first messages" << endl << "appear in case you set CONFIG_LOG_DETAIL_LEVEL = 1." << endl;
 
     try {
