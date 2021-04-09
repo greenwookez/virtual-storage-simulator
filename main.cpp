@@ -16,8 +16,12 @@ extern SimulatorTime CONFIG_SIM_TIME_LIMIT;
 extern int PROCESS_AMOUNT;
 extern int OS_SUBSTITUTE_STRATEGY;
 
+
+
 int main()
 {
+    Process * all_processes[PROCESS_AMOUNT];
+    
     cout << endl << endl << endl << endl;
     cout << "          Welcome to the Virtual Storage Simulator" << endl << endl;
 
@@ -48,7 +52,6 @@ int main()
             g_pClock = new Clock;
         }
 
-        Process * all_processes[PROCESS_AMOUNT];
         for (int i = 0; i < PROCESS_AMOUNT; i++) {
             all_processes[i] = new Process;
             string name = "Process" + string(2-to_string(i).length(), '0') + to_string(i);

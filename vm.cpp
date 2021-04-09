@@ -46,6 +46,7 @@ uint64_t PROCESS_DEFAULT_REQUESTED_MEMORY = 40; // память, необход�
 int PROCESS_AMOUNT = 15; // количество процессов
 int PROCESS_MEMORY_ACCESS_PERCENTAGE = 40; // процент инструкций процесса, которые требуют обращения в память
 
+bool DEBUG_MODE = false;
 // Substitue strategies
 RealAddress RandomSelectionStrategy() {
     return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
@@ -252,8 +253,11 @@ void Requester::PrintQueue() {
 }
 
 void Scheduler::AddProcess(Process* p_process) {
+    if (DEBUG_MODE) cout << "Adding " << p_process->GetName() << endl;
+    
     if (IsEmpty()) {
         // Если очередь пуста, планируем событие обработки этой очереди
+        if (DEBUG_MODE) cout << "from AddProcess ";
         Schedule(g_pSim->GetTime(), g_pOS, &OS::ProcessQueue);
     }
 
@@ -262,17 +266,8 @@ void Scheduler::AddProcess(Process* p_process) {
 }
 
 void Scheduler::DeleteProcess(Process* p_process) {
-    for (int i = 0; i < static_cast<int>(process_queue.size()); i++) {
-        if (process_queue[i] == p_process) {
-
-            process_queue.erase(process_queue.begin() + i);
-            return;
-        }
-    }
-
-    // Если процесс не был найден в очереди кандидатов на ЦП, выбрасываем
-    // исключение
-    __throw_logic_error("PROCESS NOT FOUND IN QUEUE");
+    if (DEBUG_MODE) cout << "Deleting " << p_process->GetName() << endl;
+    process_queue.erase(process_queue.begin());
 }
 
 void Scheduler::PutInTheEnd() {
@@ -298,24 +293,38 @@ void Scheduler::PrintQueue() {
     } else {
         for (int i = 0; i < static_cast<int>(process_queue.size()); i++) {
             string name = process_queue[i]->GetName();
-            std::cout << "{" << name.substr(name.length() - 2, name.length()) << "} ";
+            std::cout << "{" << name.substr(name.length() - 2, name.length()) << "}";
         }
     }
     std::cout << endl;
 }
 
 void OS::ProcessQueue() {
+    Process *p_process = scheduler.GetProcess();
+    if (DEBUG_MODE) {
+        cout << "Processing queue (" << p_process->GetName() << "):    ";
+        scheduler.PrintQueue();
+    }
     // Событие обработки очереди кандидатов на ЦП
-
     // Устанавливаем лимит по времени на работу одного процесса с ЦП
-    scheduler.GetProcess()->SetTimeLimit(OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT);
+    p_process->SetTimeLimit(OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT);
     // Планируем саму работу процесса
-    Schedule(GetTime(), scheduler.GetProcess(), &Process::Work);
+    Schedule(GetTime(), p_process, &Process::Work);
 }
 
 void OS::ChangeQueue() {
+    if (DEBUG_MODE) {
+        cout << "Changing queue (from "
+        << scheduler.GetProcess()->GetName() << "("
+        << scheduler.GetProcess()->GetTimeLimit() << ")" << " to ";
+    }
     scheduler.GetProcess()->SetTimeLimit(0);
     scheduler.PutInTheEnd();
+    if (DEBUG_MODE) {
+        cout << scheduler.GetProcess()->GetName() << "("
+        << scheduler.GetProcess()->GetTimeLimit() << ")" << ")" << endl;
+    }
+    if (DEBUG_MODE) cout << "from ChangeQueue ";
     Schedule(GetTime(), g_pOS, &OS::ProcessQueue);
 }
 
@@ -349,11 +358,11 @@ void OS::Allocate(VirtualAddress vaddress, Process* p_process) {
             // Устанавливаем флаг распределенности для найденного
             ram.SetRealAddress(i, true);
 
+            TTStruct & tt = FindTT(p_process).GetRecord(vaddress);
             // Вносим изменение в ТП процесса о новом соответствии виртуального адреса
-            // реальному
-            FindTT(p_process).GetRecord(vaddress).raddress = i;
-            // А также о том, что реальный адрес действителен
-            FindTT(p_process).GetRecord(vaddress).is_valid = true;
+            // реальному. А также о том, что реальный адрес действителен
+            tt.raddress = i;
+            tt.is_valid = true;
 
             Process* scheduler_process = g_pOS->GetScheduler().GetProcess();
 
@@ -363,7 +372,9 @@ void OS::Allocate(VirtualAddress vaddress, Process* p_process) {
                   Schedule(GetTime(), scheduler_process, &Process::Work);
                 }
             } else {
-                Schedule(GetTime(), g_pOS, &OS::ChangeQueue);
+                if (DEBUG_MODE) cout << "from Allocate ";
+                //Schedule(GetTime(), g_pOS, &OS::ChangeQueue);
+                ChangeQueue();
             }
 
             if (CONFIG_LOG_DETAIL_LEVEL >= 2) {
@@ -385,7 +396,9 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
     // Ввести процесс в состояние ожидания и вытащить его из очереди
 
     p_process->setWaiting(); // Вводим в состояние ожидания
-    GetScheduler().DeleteProcess(p_process);  // Удаляем из очереди претендентов
+    scheduler.DeleteProcess(p_process);  // Удаляем из очереди претендентов
+    if (DEBUG_MODE) cout << "Setting limit for " << scheduler.GetProcess()->GetName() << endl;
+    scheduler.GetProcess()->SetTimeLimit(OS_DEFAULT_PROCESS_QUEUE_TIME_LIMIT);
 
     bool found_flag = false;
     while (!found_flag) {
@@ -423,10 +436,11 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
     // адреса кандидата
     requester.AddRequest(candidate_process, candidate_vaddress, candidate_raddress, true, p_process);
 
+    TTStruct & tt = FindTT(p_process).GetRecord(vaddress);
     // Вносим изменение в ТП процесса о новом соответствии виртуального адреса реальному
-    FindTT(p_process).GetRecord(vaddress).raddress = candidate_raddress;
-    // А также о том, что реальный адрес действителен
-    FindTT(p_process).GetRecord(vaddress).is_valid = true;
+    // А также о том, что реальный адрес действителеy
+    tt.raddress = candidate_raddress;
+    tt.is_valid = true;
 
     Process* scheduler_process = g_pOS->GetScheduler().GetProcess();
     g_pSim->GetTime() = g_pSim->GetTime() + OS_DEFAULT_TIME_FOR_ALLOCATION;
@@ -435,7 +449,7 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
           Schedule(GetTime(), scheduler_process, &Process::Work);
         }
     } else {
-        Schedule(GetTime(), g_pOS, &OS::ChangeQueue);
+        ChangeQueue();
     }
 }
 
@@ -515,7 +529,9 @@ void CPU::Convert(VirtualAddress vaddress, Process *p_process) {
             Schedule(GetTime() + CPU_DEFAULT_TIME_FOR_CONVERSION, scheduler_process, &Process::Work);
           }
         } else {
-            Schedule(GetTime() + CPU_DEFAULT_TIME_FOR_CONVERSION, g_pOS, &OS::ChangeQueue);
+            if (DEBUG_MODE) cout << "from Convert ";
+            g_pSim->GetTime() = g_pSim->GetTime() + CPU_DEFAULT_TIME_FOR_CONVERSION;
+            g_pOS->ChangeQueue();
         }
     }
 }
@@ -697,11 +713,18 @@ Process::Process() {
 void Process::Work() {
     if (randomizer(100) + 1 >= PROCESS_MEMORY_ACCESS_PERCENTAGE) {
         g_pSim->GetTime() = g_pSim->GetTime() + PROCESS_DEFAULT_WORK_TIME;
+        time_limit -= PROCESS_DEFAULT_WORK_TIME;
 
         if (CONFIG_LOG_DETAIL_LEVEL >= 3) {
             Log("Working. No need of CPU.");
         }
-        Schedule(GetTime(), this, &Process::Work);
+        if (time_limit > 0) {
+            Schedule(GetTime(), this, &Process::Work);
+        } else {
+            if (DEBUG_MODE) cout << "from Work ";
+            g_pOS->ChangeQueue();
+        }
+        
     } else {
         VirtualAddress vaddress = static_cast<VirtualAddress>(randomizer(requested_memory));
         Schedule(GetTime(), g_pCPU, &CPU::Convert, vaddress, this);

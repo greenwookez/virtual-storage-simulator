@@ -156,7 +156,7 @@ public:
 
 class Process : public AgentVM {
     PageNumber requested_memory;
-    SimulatorTime time_limit;
+    int time_limit;
     bool isWaiting;
 public:
     Process();
