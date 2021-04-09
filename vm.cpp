@@ -13,7 +13,6 @@ extern Sim *g_pSim;
 extern OS *g_pOS;
 extern CPU *g_pCPU;
 extern AE *g_pAE;
-extern Clock *g_pClock;
 
 //CONSTs
 const SimulatorTime nanoSec = 1;
@@ -21,7 +20,7 @@ const SimulatorTime microSec = 1000000 * nanoSec;
 const SimulatorTime Sec = 1000000000;
 const SimulatorTime Minute = Sec * 60;
 const SimulatorTime Hour = Minute * 60;
-const uint64_t msg_space = 80;
+const uint64_t msg_space = 77;
 
 //CONFIG
 int CONFIG_LOG_ENABLE_EMPTY_STRINGS = 1; // включает пустые строки в логе 1 - выключает, 0 включает
@@ -47,13 +46,15 @@ int PROCESS_AMOUNT = 15; // количество процессов
 int PROCESS_MEMORY_ACCESS_PERCENTAGE = 40; // процент инструкций процесса, которые требуют обращения в память
 
 bool DEBUG_MODE = false;
+extern ofstream fileout;
+
 // Substitue strategies
 RealAddress RandomSelectionStrategy() {
     return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
 }
 
 RealAddress ClockSelectionStrategy() {
-    return g_pClock->Tick();
+    return g_pOS->GetClock()->Tick();
 }
 
 int InitializeInputData() {
@@ -134,7 +135,7 @@ void AgentVM :: Log(string text) {
 
 TT::TT(Process* _p_process, PageNumber size) {
     for (int i = 0; i < static_cast<int>(size); i++) {
-        TTStruct tmp_struct = { static_cast<VirtualAddress>(i), 0, false };
+        TTStruct tmp_struct = { static_cast<VirtualAddress>(i), 0, false, false, false};
         records.push_back(tmp_struct);
     }
     p_process = _p_process;
@@ -148,6 +149,14 @@ TTStruct& TT::GetRecord(VirtualAddress vaddress) {
     }
 
     __throw_logic_error("RECORD NOT FOUND");
+}
+
+TTStruct& TT::GetRecordByIndex(uint32_t i) {
+    if (i < records.size()) {
+        return records[i];
+    }
+
+    __throw_logic_error("RECORD NOT FOUND BY INDEX");
 }
 
 int TT::GetSize() {
@@ -330,6 +339,13 @@ void OS::ChangeQueue() {
 
 OS::OS() {
     SetName("OS");
+    if (OS_SUBSTITUTE_STRATEGY == 2) {
+        clock = new Clock;
+    }
+}
+
+OS::~OS() {
+    delete clock;
 }
 
 void OS::HandelInterruption(VirtualAddress vaddress, RealAddress raddress,  Process* p_process) {
@@ -463,6 +479,10 @@ TT& OS::FindTT(Process* p_process) {
     __throw_logic_error("TT NOT FOUND");
 }
 
+vector <TT> OS::GetTTs() {
+    return translation_tables;
+}
+
 Requester& OS::GetRequester() {
     return requester;
 }
@@ -474,6 +494,10 @@ Scheduler& OS::GetScheduler() {
 RAM& OS::GetRAM() {
     return ram;
 }
+
+Clock* OS::GetClock() {
+    return clock;
+};
 
 float OS::ComputeRML() {
     float result = 0.0;
@@ -504,10 +528,10 @@ CPU::CPU() {
 }
 
 void CPU::Convert(VirtualAddress vaddress, Process *p_process) {
-    TTStruct tmp = g_pOS->FindTT(p_process).GetRecord(vaddress);
-    Process* scheduler_process = g_pOS->GetScheduler().GetProcess();
+    TTStruct &tmp = g_pOS->FindTT(p_process).GetRecord(vaddress);
+    Process *scheduler_process = g_pOS->GetScheduler().GetProcess();
 
-    if (OS_SUBSTITUTE_STRATEGY == 2) g_pClock->UpdateRef(tmp.raddress);
+    if (OS_SUBSTITUTE_STRATEGY == 2) tmp.bitR = true;
 
     if (tmp.is_valid == false) {
         // Прерывание по отсутствию страницы
@@ -676,17 +700,20 @@ SimulatorTime AE::GetIOTT() {
 }
 
 float AE::ComputeAEL() {
-    float result =0.0;
-    for (int i = 0; i < disk.GetSize(); i++) {
-        if (disk.GetDiskAddress(static_cast<PageNumber>(i)) == true) {
-            result++;
-        }
-    }
-    return result/disk.GetSize() * 100.;
+    // float result =0.0;
+    // for (int i = 0; i < disk.GetSize(); i++) {
+    //     if (disk.GetDiskAddress(static_cast<PageNumber>(i)) == true) {
+    //         result++;
+    //     }
+    // }
+
+    return (float)SwapIndex.size()/(float)AE_DEFAULT_DISKSPACE_SIZE * 100.;
 }
 
 double AE::ComputePSL() {
-    return (float)io_total_time / (float)g_pSim->GetTime() * 100.;
+    float res = (float)io_total_time / (float)g_pSim->GetTime() * 100.;
+    fileout << g_pSim->GetTime() << " " << res << endl;
+    return res;
 }
 
 
@@ -760,76 +787,43 @@ SimulatorTime Process::GetTimeLimit() {
 
 
 
-ClockItem::ClockItem(PageNumber _address, bool _bitR) {
-    address = _address;
-    bitR = _bitR;
-}
-
-PageNumber ClockItem::GetAddress() {
-    return address;
-}
-
-bool ClockItem::GetBit() {
-    return bitR;
-}
-
-void ClockItem::Decrease() {
-    bitR = false;
-}
-
-void ClockItem::Update() {
-    bitR = true;
-}
-
-
-
 Clock::Clock() {
-    int size = g_pOS->GetRAM().GetSize();
-
-    // Инициализируем стрелку часов
-    chand = 0;
-
-    // Инициализируем вектор часов
-    for (int i = 0; i < size; i++) {
-        dial.push_back(ClockItem(i, true));
-    }
+    tindex = 0;
+    lindex = 0;
 }
 
 PageNumber Clock::Tick() {
-    int size = g_pOS->GetRAM().GetSize();
+    vector <TT> tables = g_pOS->GetTTs();
+    uint32_t tables_size = tables.size();
 
-    if (chand == size) {
-        chand = 0;
+    if (tindex == tables_size) {
+        tindex = 0;
     }
 
-    if (dial[chand].GetBit() == false) {
-        RealAddress result = static_cast<RealAddress>(dial[chand].GetAddress());
-        return result;
-    } else {
-        int counter = 0;
+    if (lindex == tables[tindex].GetSize()) {
+        lindex = 0;
+    }
 
+    uint32_t tindex_old = tindex;
+    uint32_t lindex_old = lindex;
+    if (tables[tindex].GetRecordByIndex(lindex).bitR == true) {
         do {
-            if (counter > size) {
+            if (tindex == tindex_old && lindex == lindex_old) {
                 break;
             }
-            dial[chand].Decrease();
-            
-            chand++;
-            if (chand == size) {
-                chand = 0;
+
+            tables[tindex].GetRecordByIndex(lindex).bitR = false;
+
+            lindex++;
+            if (lindex == tables[tindex].GetSize()) {
+                tindex++;
+                lindex = 0;
             }
-
-            counter++;
-        } while (dial[chand].GetBit() == true);
-        
-        RealAddress result = static_cast<RealAddress>(dial[chand].GetAddress());
-        return result;
+        } while (tables[tindex].GetRecordByIndex(lindex).bitR == true);
     }
-}
 
-void Clock::UpdateRef(RealAddress raddress) {
-    PageNumber page = static_cast<PageNumber>(raddress);
-    dial[page].Update();
+    RealAddress result = tables[tindex].GetRecordByIndex(lindex).raddress;
+    return result;
 }
 
 

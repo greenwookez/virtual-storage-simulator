@@ -7,3 +7,6 @@ input_data0.txt
 *.out
 *.exe
 sim
+script.p
+psl.data
+graph.png

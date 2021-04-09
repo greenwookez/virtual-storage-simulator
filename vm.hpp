@@ -23,17 +23,18 @@ struct TTStruct {
     VirtualAddress vaddress;
     RealAddress raddress;
     bool is_valid;
+    bool bitR;
+    bool bitM;
 };
 
 class TT {
     Process* p_process;
-
     vector <TTStruct> records;
-
 public:
     TT(Process* _p_process, PageNumber size);
 
     TTStruct& GetRecord(VirtualAddress vaddress);
+    TTStruct& GetRecordByIndex(uint32_t i);
     int GetSize();
     Process* GetProcess();
 };
@@ -72,22 +73,33 @@ public:
     void PrintQueue();
 };
 
+class Clock {
+    uint32_t tindex; // индекс ТП
+    uint32_t lindex; // индекс строки ТП
+public:
+    Clock();
+    PageNumber Tick();
+};
+
 class OS : public AgentVM {
     vector <TT> translation_tables;
     RAM ram;
     Requester requester;
     Scheduler scheduler;
-
+    Clock *clock;
 public:
     OS();
+    ~OS();
     void HandelInterruption(VirtualAddress vaddress, RealAddress raddress, Process* p_process);
     void LoadProcess(Process* _p_process);
     void Allocate(VirtualAddress vaddress, Process* p_process);
     void Substitute(VirtualAddress vaddress, Process* p_process);
     TT& FindTT(Process* p_process);
+    vector <TT> GetTTs();
     Requester& GetRequester();
     Scheduler& GetScheduler();
     RAM& GetRAM();
+    Clock* GetClock();
     void ProcessQueue();
     void ChangeQueue();
 
@@ -183,26 +195,6 @@ public:
     void Start();
 
 
-};
-
-class ClockItem {
-    PageNumber address;
-    bool bitR;
-public:
-    ClockItem(PageNumber _address, bool _bitR);
-    PageNumber GetAddress();
-    bool GetBit();
-    void Decrease();
-    void Update();
-};
-
-class Clock {
-    vector<ClockItem> dial;
-    PageNumber chand;
-public:
-   Clock();
-   PageNumber Tick();
-   void UpdateRef(RealAddress raddress);
 };
 
 int randomizer(int max);

@@ -1,8 +1,10 @@
 #include <iostream>
 #include <stdint.h>
 #include <assert.h>
+#include <fstream>
 #include <chrono>
 #include "vm.hpp"
+
 
 using namespace std;
 
@@ -16,12 +18,13 @@ extern SimulatorTime CONFIG_SIM_TIME_LIMIT;
 extern int PROCESS_AMOUNT;
 extern int OS_SUBSTITUTE_STRATEGY;
 
-
+ofstream fileout;
 
 int main()
 {
+    fileout.open("psl.data");
     Process * all_processes[PROCESS_AMOUNT];
-    
+
     cout << endl << endl << endl << endl;
     cout << "          Welcome to the Virtual Storage Simulator" << endl << endl;
 
@@ -47,10 +50,6 @@ int main()
         g_pOS = new OS;
         g_pCPU = new CPU;
         g_pAE = new AE;
-
-        if (OS_SUBSTITUTE_STRATEGY == 2) {
-            g_pClock = new Clock;
-        }
 
         for (int i = 0; i < PROCESS_AMOUNT; i++) {
             all_processes[i] = new Process;
@@ -106,5 +105,6 @@ int main()
         cout << "CAUGHT AN EXCEPTION: NO INFO IN TTS FOUND FOR CANDIDATE" << endl;
         err.PrintQueue();
     }
+    fileout.close();
     return 0;
 }
