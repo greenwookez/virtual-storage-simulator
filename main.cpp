@@ -13,6 +13,7 @@ OS *g_pOS;
 CPU *g_pCPU;
 AE *g_pAE;
 Clock *g_pClock;
+SelectionStrategy *g_pStrategy;
 
 extern SimulatorTime CONFIG_SIM_TIME_LIMIT;
 extern int PROCESS_AMOUNT;
@@ -20,8 +21,47 @@ extern int OS_SUBSTITUTE_STRATEGY;
 
 ofstream fileout;
 
-int main()
+int main(int argc, char **argv)
 {
+    SelectionStrategy *strats[] = {
+        new Random(
+            "Random",
+            "Random strategy description"
+        ),
+        new Clock(
+            "Clock",
+            "Clock strategy description"
+        )
+    };
+    int stratsSize = sizeof(strats)/sizeof(strats[0]);
+
+    if (argc > 1) {
+        for (int i = 1; i < argc; i++) {
+            string flag(argv[i]);
+            const string usage = "usage: ./sim [--help] [--params] [--strats]";
+
+            if (flag == "--help") {
+                cout << usage << endl;
+                cout << "    --params    Вывод параметров без симуляции" << endl;
+                cout << "    --strats    Вывод доступных стратегий замещения страниц с их описанием" << endl;
+                return 1;
+            } else if (flag == "--params") {
+                InitializeInputData();
+                return 1;
+            } else if (flag == "--strats") {
+                cout << "К использованию в симуляторе доступны следующие стратегии замещения страниц:" << endl;
+                for (int j = 0; j < stratsSize; j++) {
+                    cout << "    " << j+1 << ". " << setw(10) << right
+                    << strats[j]->GetName() << "  " <<strats[j]->GetDesription() << endl;
+                }
+                return 1;
+            } else {
+                cout << "unknown option: " << flag << endl;
+                cout << usage << endl;
+                return -1;
+            }
+        }
+    }
     fileout.open("psl.data");
     Process * all_processes[PROCESS_AMOUNT];
 
@@ -50,6 +90,7 @@ int main()
         g_pOS = new OS;
         g_pCPU = new CPU;
         g_pAE = new AE;
+        g_pStrategy = strats[OS_SUBSTITUTE_STRATEGY - 1];
 
         for (int i = 0; i < PROCESS_AMOUNT; i++) {
             all_processes[i] = new Process;

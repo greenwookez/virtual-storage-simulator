@@ -73,12 +73,31 @@ public:
     void PrintQueue();
 };
 
-class Clock {
+class SelectionStrategy {
+    string name;
+    string desc;
+public:
+    SelectionStrategy(string _name, string _desc);
+    virtual RealAddress select() = 0;
+    string GetName();
+    string GetDesription();
+};
+
+class Random : public SelectionStrategy {
+public:
+    Random(string _name, string _desc) : SelectionStrategy(_name, _desc) {};
+    RealAddress select();
+};
+
+class Clock : public SelectionStrategy {
     uint32_t tindex; // индекс ТП
     uint32_t lindex; // индекс строки ТП
 public:
-    Clock();
-    PageNumber Tick();
+    Clock(string _name, string _desc) : SelectionStrategy(_name, _desc) {
+        tindex = 0;
+        lindex = 0;
+    };
+    RealAddress select();
 };
 
 class OS : public AgentVM {
@@ -86,10 +105,8 @@ class OS : public AgentVM {
     RAM ram;
     Requester requester;
     Scheduler scheduler;
-    Clock *clock;
 public:
     OS();
-    ~OS();
     void HandelInterruption(VirtualAddress vaddress, RealAddress raddress, Process* p_process);
     void LoadProcess(Process* _p_process);
     void Allocate(VirtualAddress vaddress, Process* p_process);
@@ -99,7 +116,7 @@ public:
     Requester& GetRequester();
     Scheduler& GetScheduler();
     RAM& GetRAM();
-    Clock* GetClock();
+
     void ProcessQueue();
     void ChangeQueue();
 

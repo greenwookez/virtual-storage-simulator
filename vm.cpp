@@ -13,6 +13,7 @@ extern Sim *g_pSim;
 extern OS *g_pOS;
 extern CPU *g_pCPU;
 extern AE *g_pAE;
+extern SelectionStrategy *g_pStrategy;
 
 //CONSTs
 const SimulatorTime nanoSec = 1;
@@ -48,14 +49,6 @@ int PROCESS_MEMORY_ACCESS_PERCENTAGE = 40; // процент инструкци�
 bool DEBUG_MODE = false;
 extern ofstream fileout;
 
-// Substitue strategies
-RealAddress RandomSelectionStrategy() {
-    return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
-}
-
-RealAddress ClockSelectionStrategy() {
-    return g_pOS->GetClock()->Tick();
-}
 
 int InitializeInputData() {
     ifstream input_data;
@@ -339,13 +332,6 @@ void OS::ChangeQueue() {
 
 OS::OS() {
     SetName("OS");
-    if (OS_SUBSTITUTE_STRATEGY == 2) {
-        clock = new Clock;
-    }
-}
-
-OS::~OS() {
-    delete clock;
 }
 
 void OS::HandelInterruption(VirtualAddress vaddress, RealAddress raddress,  Process* p_process) {
@@ -419,14 +405,7 @@ void OS::Substitute(VirtualAddress vaddress, Process* p_process) {
     bool found_flag = false;
     while (!found_flag) {
 
-        switch (OS_SUBSTITUTE_STRATEGY) {
-          case 1:
-            candidate_raddress = RandomSelectionStrategy();
-            break;
-          case 2:
-            candidate_raddress = ClockSelectionStrategy();
-            break;
-        }
+        candidate_raddress = g_pStrategy->select();
 
 
         for (int j =0; j < static_cast<int>(translation_tables.size()); j++) { // цикл по всем ТП
@@ -495,10 +474,6 @@ RAM& OS::GetRAM() {
     return ram;
 }
 
-Clock* OS::GetClock() {
-    return clock;
-};
-
 float OS::ComputeRML() {
     float result = 0.0;
     for (int i = 0; i < ram.GetSize(); i++) {
@@ -531,7 +506,7 @@ void CPU::Convert(VirtualAddress vaddress, Process *p_process) {
     TTStruct &tmp = g_pOS->FindTT(p_process).GetRecord(vaddress);
     Process *scheduler_process = g_pOS->GetScheduler().GetProcess();
 
-    if (OS_SUBSTITUTE_STRATEGY == 2) tmp.bitR = true;
+    tmp.bitR = true;
 
     if (tmp.is_valid == false) {
         // Прерывание по отсутствию страницы
@@ -787,12 +762,24 @@ SimulatorTime Process::GetTimeLimit() {
 
 
 
-Clock::Clock() {
-    tindex = 0;
-    lindex = 0;
+SelectionStrategy::SelectionStrategy(string _name, string _desc) {
+    name = _name;
+    desc = _desc;
 }
 
-PageNumber Clock::Tick() {
+string SelectionStrategy::GetName() {
+    return name;
+}
+
+string SelectionStrategy::GetDesription() {
+    return desc;
+}
+
+RealAddress Random::select() {
+    return static_cast<RealAddress>(randomizer(OS_DEFAULT_RAM_SIZE));
+}
+
+RealAddress Clock::select() {
     vector <TT> tables = g_pOS->GetTTs();
     uint32_t tables_size = tables.size();
 
